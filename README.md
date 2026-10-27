@@ -32,8 +32,14 @@ The personal build opens with Rei selected. Rei uses **Bear Commander** by
 </p>
 
 Poldo uses the **F2U Red Panda** model; the meadow is drawn by the app.
-Rei and Poldo are optional models from our private setup. Their model files are not
-included or downloaded by normal setup; **Haru remains the standard build's default**.
+We used the personal build with Rei and Poldo to test support for other Live2D
+characters beyond the default Haru sample. Their different rigs, expressions,
+motions, and character/creature layouts helped verify that the app can support
+multiple models. Other characters may need their own configuration; see the
+[model guide](doc/models.md).
+
+Rei and Poldo remain optional models. Their model files are not included or
+downloaded by normal setup; **Haru remains the standard build's default**.
 Model artwork and screenshots retain their creators' rights and are not covered
 by the app's MIT license.
 
