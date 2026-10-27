@@ -9,6 +9,8 @@ SDK, sample artwork, model data or screenshots depicting that artwork.
 | Cubism Native Framework | [Live2D](https://github.com/Live2D/CubismNativeFramework), [Live2D Open Software License](https://www.live2d.com/eula/live2d-open-software-license-agreement_en.html) | Downloaded by setup; not in source export |
 | Cubism Core | [Official Native SDK](https://www.live2d.com/en/sdk/download/native/), [Live2D Proprietary Software License](https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html) | Downloaded by setup; not in source export |
 | Haru model and screenshot artwork | © Live2D Inc.; [Haru terms](https://www.live2d.com/en/learn/sample/haru/) and [Free Material License](https://www.live2d.com/eula/live2d-free-material-license-agreement_en.html) | Downloaded with SDK; only rendered previews are included in documentation |
+| Rei screenshot | Bear Commander model by DG_STUDIO / @KenKenMo6 / 天才设计学家; creator's separate terms, not MIT | Rendered documentation image only; model files are excluded |
+| Poldo screenshot | F2U Red Panda model; artwork retains its creator's rights, not MIT | Rendered documentation image only; model files are excluded |
 | WebRTC | [stasel/WebRTC](https://github.com/stasel/WebRTC), BSD license | Pinned SwiftPM dependency; notice copied into local app |
 | Yams | [jpsim/Yams](https://github.com/jpsim/Yams), MIT | Pinned SwiftPM dependency; notice copied into local app |
 

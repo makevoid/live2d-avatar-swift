@@ -16,7 +16,8 @@ TREES = {
     'vendor/swift-cubism/Sources/CubismBridge': {'.m', '.mm', '.h', '.hpp'},
     'vendor/swift-cubism/Tests': {'.swift'},
 }
-IMAGES = ['doc/images/app-window.png', 'doc/images/haru.png', 'doc/images/controls.png']
+IMAGES = ['doc/images/app-window.png', 'doc/images/haru.png', 'doc/images/controls.png',
+          'doc/images/rei.png', 'doc/images/poldo.png']
 
 
 def source_files():
