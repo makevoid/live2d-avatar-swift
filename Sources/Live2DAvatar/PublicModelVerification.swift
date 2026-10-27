@@ -40,6 +40,10 @@ func verifyPublicModel(renderer: AvatarRenderer, output: URL) throws {
             }
             for _ in 0..<Int(ceil((document.Meta.Duration + 0.5) * 60)) { renderer.model.update(deltaTime: 1.0 / 60) }
             _ = try renderer.snapshot()
+            if renderer.avatar == .character, motion.File.hasSuffix("guan.motion3.json"),
+               abs(renderer.model.parameterValue(for: "Param43")) > 0.001 {
+                throw ViewerError.message("guan did not finish hiding the raised arm.")
+            }
             // Authored motions may fade out or loop. Only generated Face motions promise held endpoints.
             if group == "Face" {
                 let name = URL(fileURLWithPath: motion.File).deletingPathExtension().deletingPathExtension().lastPathComponent
@@ -83,9 +87,26 @@ func verifyPublicModel(renderer: AvatarRenderer, output: URL) throws {
             try png.write(to: output.appendingPathComponent("app-window.png"))
         }
     }
+    var switchedModels: [String] = []
+    if let original = renderer.avatar, controller.availableAvatars.contains(original) {
+        for avatar in controller.availableAvatars {
+            try controller.selectAvatar(avatar)
+            let motionCount = (renderer.manifest.FileReferences.Motions ?? [:]).values.reduce(0) { $0 + $1.count }
+            guard renderer.avatar == avatar,
+                  controller.expression.numberOfItems == renderer.expressions.count + 1,
+                  controller.motionItems.count == motionCount,
+                  controller.avatarPicker.selectedSegment == controller.availableAvatars.firstIndex(of: avatar) else {
+                throw ViewerError.message("Avatar switch did not refresh controls for \(avatar.modelName).")
+            }
+            try renderer.savePNG(renderer.snapshot(), to: output.appendingPathComponent("\(avatar.directoryName)-switched.png"))
+            switchedModels.append(avatar.modelName)
+        }
+        try controller.selectAvatar(original)
+    }
     var report: [String: Any] = ["status": "passed", "model": renderer.modelName,
         "visiblePixels": visible, "animationChangesPixels": true, "motions": checkedMotions,
-        "expressions": renderer.expressions.count, "device": renderer.device.name]
+        "expressions": renderer.expressions.count, "device": renderer.device.name,
+        "switchedModels": switchedModels]
     if let persona = renderer.avatar?.persona {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

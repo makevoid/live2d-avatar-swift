@@ -42,13 +42,16 @@ Do not make source edits inside generated SDK directories: record changes as pat
 | `vendor/swift-cubism/Sources/CubismFramework/` | Downloaded/patched Framework | No |
 | `vendor/swift-cubism/Core/` | Downloaded Core and notices | No |
 | `local-assets/Haru/` | Downloaded default model | No |
+| `local-assets/private/` | Optional authenticated private asset checkout | No |
 | `.build/` | SwiftPM dependency/build cache | No |
 | `build/` | Local app, checks and source archive | No |
-| `memory_data/mem_private.md` | Optional personal reference profile | No |
+| `memory_data` | Optional personal reference profiles, including the private-checkout symlink | No |
 
 The build bundles Haru, Metal shader source, required native libraries and license
 notices. It never bundles user profiles or saved memory files. The renderer compiles
 the shaders locally; a separately downloaded Metal compiler is not required.
+The optional [personal setup task](private-assets.md) builds a separate private app
+with Rei and Poldo after cloning your private assets. Default builds remain Haru-only.
 
 ## Troubleshooting
 

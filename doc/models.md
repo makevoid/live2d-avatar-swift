@@ -89,6 +89,8 @@ For a maintained integration, make these code changes in your fork:
 The repository retains descriptors for two earlier private development models so
 their bridge/behavior code remains understandable. Their model files are absent,
 so they do not appear in the default selector and are not needed for the public build.
+Owners of these models can use the [personal setup task](private-assets.md) to load
+them from a separate private repository without maintaining another application fork.
 
 For a local test of an unregistered model:
 

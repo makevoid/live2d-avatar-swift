@@ -6,8 +6,7 @@ build/
 .env
 .env.*
 !.env.example
-memory_data/mem_private.md
-memory_data/*.yaml
+/memory_data
 local-assets/
 vendor/swift-cubism/Core/
 vendor/swift-cubism/Sources/CubismFramework/
