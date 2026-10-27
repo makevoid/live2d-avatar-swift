@@ -1,61 +1,98 @@
-# Live2D Avatar for macOS
-
-A native Swift companion with a Live2D avatar, Metal rendering, optional voice
-conversation, and persistent character memory. No browser renderer or separate
-application server is required.
-
-## Character gallery
-
-### Haru · standard build
-
 <p align="center">
-  <img src="doc/images/app-window.png" alt="Haru in the full app UI with close upper-body framing and the complete control panel" width="1120">
+  <img src="https://github.com/user-attachments/assets/21f560c2-8363-4061-986a-7a6d3fb3e62e" width="128" alt="Live2D Avatar app icon">
 </p>
 
-Haru opens by default in the standard build, framed from the upper body.
-Haru artwork © Live2D Inc.; screenshots and model artwork retain the
-[sample's separate terms](https://www.live2d.com/en/learn/sample/haru/).
-
-### Rei · personal build default
+<h1 align="center">Live2D Avatar for macOS</h1>
 
 <p align="center">
-  <img src="doc/images/rei.png" alt="Rei in the full personal app UI with the character selector and complete control panel" width="1120">
+  A native Swift companion with a Live2D avatar, Metal rendering, optional voice
+  conversation, and persistent character memory.<br>
+  No browser renderer or separate application server is required.
 </p>
-
-The personal build opens with Rei selected. Rei uses **Bear Commander** by
-**DG_STUDIO / @KenKenMo6 / 天才设计学家**.
-
-### Poldo · creature
 
 <p align="center">
-  <img src="doc/images/poldo.png" alt="Poldo in the full personal app UI with the mountain meadow and complete control panel" width="1120">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#controls">Controls</a> ·
+  <a href="#desktop-mode">Desktop mode</a> ·
+  <a href="#optional-voice-and-chat">Voice &amp; chat</a> ·
+  <a href="#memory-that-survives-sessions">Memory</a> ·
+  <a href="#use-your-own-model">Your own model</a> ·
+  <a href="doc/architecture.md">Architecture</a>
 </p>
 
-Poldo uses the **F2U Red Panda** model; the meadow is drawn by the app.
-We used the personal build with Rei and Poldo to test support for other Live2D
-characters beyond the default Haru sample. Their different rigs, expressions,
-motions, and character/creature layouts helped verify that the app can support
-multiple models. Other characters may need their own configuration; see the
-[model guide](doc/models.md).
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/9d2efc61-01eb-4239-82c2-cbefaebde51a" alt="Rei floating over a macOS desktop in desktop mode, next to a browser and a terminal, with a voice caption and the two-button voice pill" width="900">
+</p>
 
-Rei and Poldo remain optional models. Their model files are not included or
-downloaded by normal setup; **Haru remains the standard build's default**.
-Model artwork and screenshots retain their creators' rights and are not covered
-by the app's MIT license.
+<p align="center"><sub>
+  Desktop mode: the window frame and background disappear and the character floats over your other apps.
+  The desktop behind her is an illustration; the character, caption and controls are captured from the app.
+</sub></p>
 
 ## What you can do
 
-- Animate the avatar locally with blinking, breathing, physics, expressions and motions.
-- Drag to reposition, scroll to zoom, and optionally let the character follow the pointer.
-- Talk through native WebRTC; the assistant's received audio drives mouth opening.
-- Read a separate chat window with captions and clickable web-search sources.
-- Save explicit facts for each character. New sessions load them automatically;
+- **Animate locally** with blinking, breathing, physics, expressions and motions.
+- **Frame the character**: drag to reposition, scroll to zoom, and optionally let
+  the character follow the pointer.
+- **Float on the desktop**: desktop mode hides the window frame and background and
+  keeps the character on top of your other apps.
+- **Talk by voice** through native WebRTC; the assistant's received audio drives
+  mouth opening.
+- **Read along** in a separate chat window with captions and clickable web-search sources.
+- **Remember facts** for each character. New sessions load them automatically;
   saved corrections take precedence over older reference profiles.
-- Load another creator's Cubism runtime model from a local directory.
+- **Bring your own model**: load another creator's Cubism runtime model from a local directory.
 
 Rendering and manual controls work without an API key. Voice, web search and
 semantic emotion decisions are optional online features. Camera tracking and
 phoneme-level lip sync are not implemented.
+
+## Quick start
+
+Requires macOS 14+, a Metal-capable Mac, Swift 6.1+ and Python 3
+([full requirements](#requirements)). Review the
+[SDK download terms](https://www.live2d.com/en/sdk/download/native/) and
+[Haru sample terms](https://www.live2d.com/en/learn/sample/haru/) first.
+
+```sh
+git clone https://github.com/makevoid/live2d-avatar-swift.git
+cd live2d-avatar-swift
+python3 scripts/setup.py --download --accept-live2d-licenses   # SDK + Haru, pinned and verified
+./scripts/run.sh                                               # build and open the app
+```
+
+Prefer to download the SDK yourself? See [Install and run](#install-and-run).
+
+## Character gallery
+
+Haru is the standard build. A personal build adds two optional characters that we
+used to test rigs, expressions, motions and layouts beyond the default sample.
+
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="doc/images/app-window.png" alt="Haru in the app window, framed from the upper body"><br>
+      <b>Haru</b> · standard build<br>
+      <sub>© Live2D Inc.; <a href="https://www.live2d.com/en/learn/sample/haru/">sample's separate terms</a></sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="https://github.com/user-attachments/assets/a00165df-8cea-4ddf-88cd-435dfab59315" alt="Rei in the app window with the floating control bar"><br>
+      <b>Rei</b> · personal build default<br>
+      <sub><b>Bear Commander</b> by <b>DG_STUDIO / @KenKenMo6 / 天才设计学家</b></sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="https://github.com/user-attachments/assets/aab2aca3-dd51-42ff-8a51-2172a1a89744" alt="Poldo in the app window with the mountain meadow and the floating control bar"><br>
+      <b>Poldo</b> · creature<br>
+      <sub><b>F2U Red Panda</b> model; the meadow is drawn by the app</sub>
+    </td>
+  </tr>
+</table>
+
+Rei and Poldo remain optional models. Their model files are not included or
+downloaded by normal setup; **Haru remains the standard build's default**. Other
+characters may need their own configuration; see the [model guide](doc/models.md).
+Model artwork and screenshots retain their creators' rights and are not covered
+by the app's MIT license.
 
 ## What is in this repository?
 
@@ -144,22 +181,35 @@ Xcode, run setup and build once, then open `Package.swift`.
 
 ## Controls
 
+The avatar fills the window. One floating bar holds everything: panels on the left,
+voice in the middle, conversation on the right.
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/3049ccfa-8f3f-4995-90b6-59af673d4ff7" alt="Rei with the Expressions panel open above the control bar: emotion, expression and motion chips and the mouth slider" width="760">
+</p>
+
 | Control | Behavior |
 | --- | --- |
+| Character (shows the current name) | Switch character; model stats and credits |
+| Expressions | Emotion, expression and motion chips, Automatic emotions, mouth opening |
+| View | Follow mouse, pause animation, desktop mode, reset pose & view |
+| **Start voice** / **Cancel voice** | Start or end a voice session |
+| Mute | Mute the microphone while staying connected |
+| Chat / ⌘⇧C | Open or hide the separate conversation window |
+| Memory | Inspect or clear facts saved for the current character |
 | Drag / scroll on the avatar | Reposition / zoom |
-| Follow mouse | Head, body and eyes follow the pointer |
-| Expression | Play an expression authored in the loaded model |
-| Motion + Play motion | Play an authored motion or generated mouth pose |
-| Emotion / Automatic emotions | Hold a procedural emotion or allow conversational reactions |
-| Mouth opening | Manually open the mouth; voice can open it further |
-| Pause animation | Freeze the animation while keeping rendering active |
-| Reset pose & view | Restore the model pose and framing |
-| Show chat / ⌘⇧C | Open or hide the separate conversation window |
-| Saved memories… | Inspect or clear facts saved for the current character |
 
 Haru is the default. Only models actually bundled in the app appear in its selector.
 The available expressions and motions come from the model manifest. Manual pose
 changes turn off automatic emotions so the selected look can hold.
+
+## Desktop mode
+
+Turn on **Desktop mode** in the View panel (or press ⇧⌘D). The window frame, shadow
+and background disappear, scenery is hidden, and the character stays on top of other
+windows. A small pill keeps two buttons: start or cancel voice, and bring the full
+window back (Esc does the same). Dragging moves the window rather than the character
+inside it, and scrolling does not zoom.
 
 ## Optional voice and chat
 
@@ -177,8 +227,8 @@ chmod 600 ~/.openai_api_key
 
 Never commit credentials. Click **Start voice**, allow microphone access, and speak.
 Try “smile”, “pause animation”, or “remember that I prefer Swift”. Memory changes
-show the exact fact and character for confirmation. **Mute microphone** keeps the
-session connected; **Stop voice** ends it. API usage is billed to your OpenAI project.
+show the exact fact and character for confirmation. **Mute** keeps the
+session connected; **Cancel voice** ends it. API usage is billed to your OpenAI project.
 
 Set `OPENAI_VOICE_BACKEND_MODEL` to override the backend with a compatible model.
 See [voice and privacy](doc/voice.md) for credential handling, data flow and limitations.
