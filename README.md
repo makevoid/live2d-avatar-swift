@@ -11,6 +11,18 @@ application server is required.
 *Actual app rendering and controls. Haru artwork © Live2D Inc.; screenshots and
 model artwork retain the [sample's separate terms](https://www.live2d.com/en/learn/sample/haru/).*
 
+## Character gallery
+
+| Rei · Character | Poldo · Creature |
+| :---: | :---: |
+| <img src="doc/images/rei.png" alt="Rei, using the Bear Commander model, rendered in Live2D Avatar" width="420"> | <img src="doc/images/poldo.png" alt="Poldo, our red-panda creature, in the app's mountain meadow" width="420"> |
+
+Rei uses **Bear Commander** by **DG_STUDIO / @KenKenMo6 / 天才设计学家**.
+Poldo uses the **F2U Red Panda** model; the meadow is drawn by the app.
+These are screenshots of optional models from our local setup. Their model files
+are not included or downloaded by setup; **Haru remains the default**. Model artwork
+and these screenshots retain their creators' rights and are not covered by the app's MIT license.
+
 ## What you can do
 
 - Animate the avatar locally with blinking, breathing, physics, expressions and motions.
