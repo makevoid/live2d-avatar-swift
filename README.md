@@ -4,24 +4,38 @@ A native Swift companion with a Live2D avatar, Metal rendering, optional voice
 conversation, and persistent character memory. No browser renderer or separate
 application server is required.
 
-<p align="center">
-  <img src="doc/images/app-window.png" alt="Live2D Avatar running the Haru sample with native macOS controls" width="1000">
-</p>
-
-*Actual app rendering and controls. Haru artwork © Live2D Inc.; screenshots and
-model artwork retain the [sample's separate terms](https://www.live2d.com/en/learn/sample/haru/).*
-
 ## Character gallery
 
-| Rei · Character | Poldo · Creature |
-| :---: | :---: |
-| <img src="doc/images/rei.png" alt="Rei, using the Bear Commander model, rendered in Live2D Avatar" width="420"> | <img src="doc/images/poldo.png" alt="Poldo, our red-panda creature, in the app's mountain meadow" width="420"> |
+### Haru · standard build
 
-Rei uses **Bear Commander** by **DG_STUDIO / @KenKenMo6 / 天才设计学家**.
+<p align="center">
+  <img src="doc/images/app-window.png" alt="Haru in the full app UI with close upper-body framing and the complete control panel" width="1120">
+</p>
+
+Haru opens by default in the standard build, framed from the upper body.
+Haru artwork © Live2D Inc.; screenshots and model artwork retain the
+[sample's separate terms](https://www.live2d.com/en/learn/sample/haru/).
+
+### Rei · personal build default
+
+<p align="center">
+  <img src="doc/images/rei.png" alt="Rei in the full personal app UI with the character selector and complete control panel" width="1120">
+</p>
+
+The personal build opens with Rei selected. Rei uses **Bear Commander** by
+**DG_STUDIO / @KenKenMo6 / 天才设计学家**.
+
+### Poldo · creature
+
+<p align="center">
+  <img src="doc/images/poldo.png" alt="Poldo in the full personal app UI with the mountain meadow and complete control panel" width="1120">
+</p>
+
 Poldo uses the **F2U Red Panda** model; the meadow is drawn by the app.
-These are screenshots of optional models from our local setup. Their model files
-are not included or downloaded by normal setup; **Haru remains the default**. Model artwork
-and these screenshots retain their creators' rights and are not covered by the app's MIT license.
+Rei and Poldo are optional models from our private setup. Their model files are not
+included or downloaded by normal setup; **Haru remains the standard build's default**.
+Model artwork and screenshots retain their creators' rights and are not covered
+by the app's MIT license.
 
 ## What you can do
 
@@ -211,7 +225,8 @@ PRIVATE_ASSETS_REPO=git@github.com:YOUR_ACCOUNT/YOUR_PRIVATE_ASSETS.git rake pri
 ```
 
 This clones into ignored `local-assets/private/`, validates both models, links local
-reference profiles, and opens `build/Live2D Avatar Private.app`. Later, `rake private`
+reference profiles, and opens `build/Live2D Avatar Private.app` with Rei selected.
+Later, `rake private`
 reuses that checkout. Git authentication must already grant access to the private repo.
 The ordinary build still produces the Haru app. Neither build bundles profiles, and
 source packaging excludes the private checkout. See the [private setup guide](doc/private-assets.md)
