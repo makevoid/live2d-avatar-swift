@@ -65,13 +65,14 @@ Prefer to download the SDK yourself? See [Install and run](#install-and-run).
 
 ## Character gallery
 
-Haru is the standard build. A personal build adds two optional characters that we
-used to test rigs, expressions, motions and layouts beyond the default sample.
+Haru is the standard build. The app has also been tested with premium third-party
+models, from human characters to creatures: Rei and Poldo below are animated with
+the same rigs, expressions, motions and controls.
 
 <table>
   <tr>
     <td width="33%" align="center">
-      <img src="doc/images/app-window.png" alt="Haru in the app window, framed from the upper body"><br>
+      <img src="https://github.com/user-attachments/assets/41a6d68a-bbe7-4ed3-883a-02ace4b3101f" alt="Haru in the app window with the floating control bar"><br>
       <b>Haru</b> · standard build<br>
       <sub>© Live2D Inc.; <a href="https://www.live2d.com/en/learn/sample/haru/">sample's separate terms</a></sub>
     </td>
