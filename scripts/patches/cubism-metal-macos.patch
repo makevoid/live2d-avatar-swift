@@ -1,0 +1,112 @@
+--- a/src/Rendering/Metal/CubismCommandBuffer_Metal.mm
++++ b/src/Rendering/Metal/CubismCommandBuffer_Metal.mm
+@@ -86,6 +86,8 @@
+ {
+     _vbStride = stride;
+     _vbCount = count;
++    // Exported models can contain empty meshes. Metal rejects zero-byte buffers.
++    if (count <= 0) return;
+     _vertices = [device newBufferWithLength:_vbStride * count
+                                                 options:MTLResourceStorageModeShared];
+ 
+@@ -96,12 +98,14 @@
+ void CubismCommandBuffer_Metal::DrawCommandBuffer::CreateIndexBuffer(id<MTLDevice> device, csmSizeInt count)
+ {
+     _ibCount = count;
++    if (count <= 0) return;
+     _indices = [device newBufferWithLength:sizeof(csmInt16) * _ibCount
+                                                 options:MTLResourceStorageModeShared];
+ }
+ 
+ void CubismCommandBuffer_Metal::DrawCommandBuffer::UpdateVertexBuffer(void* data, void* uvData, csmSizeInt count)
+ {
++    if (count <= 0) return;
+     csmSizeInt length = count * _vbStride;
+     csmFloat32* destVertices = reinterpret_cast<csmFloat32*>([_vertices contents]);
+     csmFloat32* destUvs = reinterpret_cast<csmFloat32*>([_uvs contents]);
+--- a/src/Rendering/Metal/CubismRenderer_Metal.hpp
++++ b/src/Rendering/Metal/CubismRenderer_Metal.hpp
+@@ -121,6 +121,9 @@
+ 
+     static void StartFrame(id<MTLDevice> device, id<MTLCommandBuffer> commandBuffer, MTLRenderPassDescriptor* renderPassDescriptor);
+ 
++    /// Per-mesh visibility override, independent of expressions and parameter updates.
++    void SetDrawableHidden(csmInt32 index, csmBool hidden);
++
+     /**
+      * @brief    レンダラの初期化処理を実行する<br>
+      *           引数に渡したモデルからレンダラの初期化処理に必要な情報を取り出すことができる
+@@ -297,6 +300,7 @@
+ 
+     csmMap< csmInt32, id <MTLTexture> > _textures;                      ///< モデルが参照するテクスチャとレンダラでバインドしているテクスチャとのマップ
+     csmVector<csmInt32> _sortedDrawableIndexList;       ///< 描画オブジェクトのインデックスを描画順に並べたリスト
++    csmVector<csmBool> _hiddenDrawables;
+     CubismRendererProfile_Metal _rendererProfile;               ///< Metalのステートを保持するオブジェクト
+     CubismClippingManager_Metal* _clippingManager;               ///< クリッピングマスク管理オブジェクト
+     CubismClippingContext_Metal* _clippingContextBufferForMask;  ///< マスクテクスチャに描画するためのクリッピングコンテキスト
+--- a/src/Rendering/Metal/CubismRenderer_Metal.mm
++++ b/src/Rendering/Metal/CubismRenderer_Metal.mm
+@@ -319,6 +319,7 @@
+     }
+ 
+     _sortedDrawableIndexList.Resize(model->GetDrawableCount(), 0);
++    _hiddenDrawables.Resize(model->GetDrawableCount(), false);
+ 
+     _drawableDrawCommandBuffer.Resize(model->GetDrawableCount());
+ 
+@@ -340,6 +341,11 @@
+     }
+ 
+     CubismRenderer::Initialize(model, maskBufferCount);  //親クラスの処理を呼ぶ
++}
++
++void CubismRenderer_Metal::SetDrawableHidden(csmInt32 index, csmBool hidden)
++{
++    if (index >= 0 && index < _hiddenDrawables.GetSize()) _hiddenDrawables[index] = hidden;
+ }
+ 
+ void CubismRenderer_Metal::StartFrame(id<MTLDevice> device, id<MTLCommandBuffer> commandBuffer, MTLRenderPassDescriptor* renderPassDescriptor)
+@@ -534,6 +540,12 @@
+                                     , id <MTLRenderCommandEncoder> renderEncoder
+                                     , const CubismModel& model, const csmInt32 index)
+ {
++    if (_hiddenDrawables[index])
++    {
++        SetClippingContextBufferForDraw(NULL);
++        SetClippingContextBufferForMask(NULL);
++        return;
++    }
+ #ifndef CSM_DEBUG
+     if (_textures[model.GetDrawableTextureIndex(index)] == 0) return;    // モデルが参照するテクスチャがバインドされていない場合は描画をスキップする
+ #endif
+--- a/src/Rendering/Metal/CubismRenderingInstanceSingleton_Metal.h
++++ b/src/Rendering/Metal/CubismRenderingInstanceSingleton_Metal.h
+@@ -5,7 +5,8 @@
+  * that can be found at https://www.live2d.com/eula/live2d-open-software-license-agreement_en.html.
+  */
+ 
+-#import <UIKit/UIKit.h>
++#import <Foundation/Foundation.h>
++#import <QuartzCore/CAMetalLayer.h>
+ #import <MetalKit/MetalKit.h>
+ 
+ //Framework側で保持しなければいけない値
+@@ -13,6 +14,7 @@
+     id <MTLDevice> mtlDevice;
+     CAMetalLayer* metalLayer;
+ }
++@property (nonatomic, retain) id<MTLLibrary> shaderLibrary;
+ + (id)sharedManager;
+ - (void)setMTLDevice:(id <MTLDevice>)param;
+ - (id <MTLDevice>)getMTLDevice;
+--- a/src/Rendering/Metal/CubismShader_Metal.mm
++++ b/src/Rendering/Metal/CubismShader_Metal.mm
+@@ -118,7 +118,7 @@
+     //シェーダライブラリのロード（.metal）
+     CubismRenderingInstanceSingleton_Metal *single = [CubismRenderingInstanceSingleton_Metal sharedManager];
+     id <MTLDevice> device = [single getMTLDevice];
+-    _shaderLib = [device newDefaultLibrary];
++    _shaderLib = single.shaderLibrary ? [single.shaderLibrary retain] : [device newDefaultLibrary];
+ 
+     if(!_shaderLib)
+     {
