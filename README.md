@@ -20,7 +20,7 @@ model artwork retain the [sample's separate terms](https://www.live2d.com/en/lea
 Rei uses **Bear Commander** by **DG_STUDIO / @KenKenMo6 / 天才设计学家**.
 Poldo uses the **F2U Red Panda** model; the meadow is drawn by the app.
 These are screenshots of optional models from our local setup. Their model files
-are not included or downloaded by setup; **Haru remains the default**. Model artwork
+are not included or downloaded by normal setup; **Haru remains the default**. Model artwork
 and these screenshots retain their creators' rights and are not covered by the app's MIT license.
 
 ## What you can do
@@ -71,9 +71,12 @@ ARM64 and x86_64; Intel execution has not been verified here.
 
 ## Install and run
 
-Start in the extracted source folder or your clone of the clean source repository.
-Do not use the old private development repository as a public release: its history
-contains assets that this export deliberately excludes.
+Start in the extracted source folder or clone this clean application repository:
+
+```sh
+git clone https://github.com/makevoid/live2d-avatar-swift.git
+cd live2d-avatar-swift
+```
 
 ### 1. Obtain the SDK and default model
 
@@ -197,6 +200,22 @@ python3 scripts/prepare-model.py "/path/to/MyModel/runtime" "local-assets/custom
 The app loads that model locally; it does not upload its files. See the
 [complete model guide](doc/models.md) for folder structure, expressions, limits,
 adding a persona and memory, and bundling another model intentionally.
+
+## Optional personal asset collection
+
+Owners of a separate private asset repository can load the Rei/Poldo integration
+with one task after normal SDK setup:
+
+```sh
+PRIVATE_ASSETS_REPO=git@github.com:YOUR_ACCOUNT/YOUR_PRIVATE_ASSETS.git rake private
+```
+
+This clones into ignored `local-assets/private/`, validates both models, links local
+reference profiles, and opens `build/Live2D Avatar Private.app`. Later, `rake private`
+reuses that checkout. Git authentication must already grant access to the private repo.
+The ordinary build still produces the Haru app. Neither build bundles profiles, and
+source packaging excludes the private checkout. See the [private setup guide](doc/private-assets.md)
+for the layout, updates, and a command that does not require Rake.
 
 ## Verification and contributing
 
