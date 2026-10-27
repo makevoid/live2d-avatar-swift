@@ -60,6 +60,15 @@ func verifyPublicModel(renderer: AvatarRenderer, output: URL) throws {
     controller.applyEmotion(.happy)
     for _ in 0..<120 { renderer.updateAnimation(deltaTime: 1.0 / 60) }
     controller.window.contentView?.layoutSubtreeIfNeeded()
+    // Documentation captures include every control and creator credit, even when
+    // the normal window would need its sidebar scrolled.
+    if let content = controller.window.contentView,
+       let sidebar = content.subviews.compactMap({ $0 as? NSScrollView }).first {
+        let height = max(1000, ceil((sidebar.documentView?.fittingSize.height ?? 0) + 40))
+        let controlsWidth = content.bounds.width - controller.metalView.bounds.width
+        controller.window.setContentSize(NSSize(width: ceil(height * 1.15 + controlsWidth), height: height))
+        content.layoutSubtreeIfNeeded()
+    }
     if let sidebar = controller.window.contentView?.subviews.compactMap({ $0 as? NSScrollView }).first,
        let bitmap = sidebar.bitmapImageRepForCachingDisplay(in: sidebar.bounds) {
         sidebar.cacheDisplay(in: sidebar.bounds, to: bitmap)
@@ -78,7 +87,10 @@ func verifyPublicModel(renderer: AvatarRenderer, output: URL) throws {
         capture.lockFocus()
         controller.window.backgroundColor.setFill()
         content.bounds.fill()
-        bitmap.draw(in: content.bounds)
+        if let controlsImage = bitmap.cgImage {
+            NSImage(cgImage: controlsImage, size: content.bounds.size).draw(
+                in: content.bounds, from: .zero, operation: .sourceOver, fraction: 1)
+        }
         NSColor(calibratedRed: 0.93, green: 0.94, blue: 0.95, alpha: 1).setFill()
         frame.fill()
         NSImage(contentsOf: renderURL)?.draw(in: frame)

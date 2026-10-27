@@ -55,7 +55,7 @@ there deliberately. Nothing is uploaded automatically.
 rake private
 ```
 
-This builds and opens `build/Live2D Avatar Private.app`, with Haru, Character/Rei,
+This builds and opens `build/Live2D Avatar Private.app`, with Rei selected at startup and Haru, Character/Rei,
 and Creature/Poldo in the selector. It does not modify original model assets.
 Prepared model copies belong only to that ignored personal app bundle.
 

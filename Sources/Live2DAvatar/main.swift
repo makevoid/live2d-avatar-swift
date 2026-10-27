@@ -960,7 +960,9 @@ func makeRenderer() throws -> AvatarRenderer {
     if let index = args.firstIndex(of: "--model"), args.indices.contains(index + 1) {
         model = URL(fileURLWithPath: args[index + 1], isDirectory: true)
     } else {
-        model = resources.appendingPathComponent("Haru")
+        let preferred = Bundle.main.object(forInfoDictionaryKey: "Live2DDefaultModel") as? String
+        let initialAvatar = BundledAvatar.available(in: resources).first { $0.directoryName == preferred } ?? .sample
+        model = resources.appendingPathComponent(initialAvatar.directoryName)
     }
     return try AvatarRenderer(modelDirectory: model, shaderDirectory: resources.appendingPathComponent("Shaders"))
 }

@@ -39,5 +39,8 @@ SDK archive and a small Framework patch reproduce the macOS integration; see
 
 The code retains optional private-model descriptors, but no corresponding assets are distributed. The normal public GPU
 path uses Haru. The selector lists only configured models present in the bundle.
+The normal bundle defaults to Haru; the personal build sets `Live2DDefaultModel`
+to Rei in its generated Info.plist. Explicit `--model` arguments take precedence.
+Haru and Rei use individual upper-body camera presets on load and Reset.
 An arbitrary `--model` directory loads with generic instructions; a named persona
 and independent memory require an explicit catalog entry.

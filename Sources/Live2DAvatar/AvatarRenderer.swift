@@ -43,6 +43,10 @@ final class AvatarRenderer: NSObject, MTKViewDelegate {
     static let initialZoom = 2.15
     static let initialPanX = 0.05
     static let initialPanY = -1.235
+    // Haru uses the same upper-body presentation, calibrated for her taller rig.
+    static let haruZoom = 2.5
+    static let haruPanX = 0.05
+    static let haruPanY = -1.47
     // Smaller, lower framing matched to the creature reference screenshot.
     static let creatureZoom = 0.62
     static let creaturePanY = -0.15
@@ -214,9 +218,16 @@ final class AvatarRenderer: NSObject, MTKViewDelegate {
     }
 
     private func resetView() {
-        zoom = avatar == .character ? Self.initialZoom : (avatar == .creature ? Self.creatureZoom : 1.0)
-        panX = avatar == .character ? Self.initialPanX : 0
-        panY = avatar == .character ? Self.initialPanY : (avatar == .creature ? Self.creaturePanY : 0)
+        switch avatar {
+        case .character:
+            (zoom, panX, panY) = (Self.initialZoom, Self.initialPanX, Self.initialPanY)
+        case .creature:
+            (zoom, panX, panY) = (Self.creatureZoom, 0, Self.creaturePanY)
+        case .sample:
+            (zoom, panX, panY) = (Self.haruZoom, Self.haruPanX, Self.haruPanY)
+        case nil:
+            (zoom, panX, panY) = (1, 0, 0)
+        }
     }
 
     /// Render through the same Cubism/Metal pipeline as the window, then read the GPU output.

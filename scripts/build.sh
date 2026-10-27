@@ -26,6 +26,9 @@ rm -rf "$app/Contents/Resources"
 mkdir -p "$app/Contents/Resources/Shaders" "$app/Contents/Resources/Licenses" "$app/Contents/Frameworks"
 cp "$bin/Live2DAvatar" "$app/Contents/MacOS/Live2DAvatar"
 cp App/Info.plist "$app/Contents/Info.plist"
+if [[ -n "${PRIVATE_ASSETS_DIR:-}" ]]; then
+  /usr/libexec/PlistBuddy -c 'Set :Live2DDefaultModel live2d_model' "$app/Contents/Info.plist"
+fi
 cp App/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 framework="$PWD/.build/artifacts/webrtc/WebRTC/WebRTC.xcframework/macos-x86_64_arm64/WebRTC.framework"
 ditto "$framework" "$app/Contents/Frameworks/WebRTC.framework"
