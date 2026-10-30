@@ -20,6 +20,15 @@ Responses tool events. `Sources/AvatarBehavior/` contains identities, expression
 catalogs, procedural emotion recipes, bounded transcript history and YAML memory.
 Automatic emotions use transcript meaning; audio levels drive mouth opening.
 
+The avatar fills the window under a floating control bar. UI components and actions
+live in `main.swift`: the Character, Expressions and View popovers, expression and
+motion chips, centered voice button, captions, chat and memory controls. Character
+names come from the installed models' personas. Desktop mode removes the window
+frame and background, hides scenery, and replaces the bar with voice and restore
+buttons. `AvatarMetalView` moves the window on drag and disables zoom in that mode.
+The Window menu provides ⇧⌘D for desktop mode and ⇧⌘C for chat; Esc restores the
+full window. Space has no voice shortcut.
+
 Each frame restores model parameters, advances authored motions, saves the base,
 then applies blinking, expressions, pointer input, breathing, mouth opening and
 transient emotion overlays before physics and drawable updates. Emotion parameters
@@ -44,3 +53,10 @@ to Rei in its generated Info.plist. Explicit `--model` arguments take precedence
 Haru and Rei use individual upper-body camera presets on load and Reset.
 An arbitrary `--model` directory loads with generic instructions; a named persona
 and independent memory require an explicit catalog entry.
+
+`PublicModelVerification.swift` checks rendering, motions, switching and memory.
+`ControlLayoutVerification.swift` checks the floating controls, chip actions,
+caption layout and desktop-mode transitions using only the models in the bundle.
+It composites GPU readback with AppKit overlays for the verification screenshots.
+Both run offline through `./scripts/test.sh` with Haru; the personal app's
+`--smoke-test` also exercises Rei and Poldo when installed.

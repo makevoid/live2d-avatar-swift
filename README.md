@@ -294,6 +294,8 @@ for the layout, updates, and a command that does not require Rake.
 `./scripts/test.sh` runs the offline Swift suite and a Metal smoke test. It checks
 visible rendering, changed animation pixels, all Haru expressions and full motion
 durations, generated mouth-pose endpoints, and saved-memory recall across restarts.
+It also checks floating controls, expression/motion chip actions, captions, and
+desktop-mode transparency and restoration, using only the installed models.
 Results and PNGs appear in `build/verification/`. No microphone or API calls are
 needed. Opt-in live API tests are separate and billed.
 

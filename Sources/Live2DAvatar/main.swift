@@ -5,22 +5,43 @@ import GPTLiveSwift
 import AvatarBehavior
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTextViewDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTextViewDelegate, NSPopoverDelegate {
     var window: NSWindow!
     var renderer: AvatarRenderer!
     var metalView: AvatarMetalView!
-    let expression = NSPopUpButton()
-    let motions = NSPopUpButton()
+    // Off-screen selection models; the Expressions panel shows them as chip grids.
+    let expression = ObservedPopUpButton()
+    let motions = ObservedPopUpButton()
     let mouth = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
     let availableAvatars = BundledAvatar.available(in: resourceDirectory())
-    lazy var avatarPicker = NSSegmentedControl(labels: availableAvatars.map { $0.title },
+    lazy var avatarPicker = NSSegmentedControl(labels: availableAvatars.map { $0.persona.name },
                                           trackingMode: .selectOne, target: nil, action: nil)
-    let play = NSButton(title: "Play motion", target: nil, action: nil)
-    let follow = NSButton(checkboxWithTitle: "Follow mouse", target: nil, action: nil)
-    let pause = NSButton(checkboxWithTitle: "Pause animation", target: nil, action: nil)
-    let voiceButton = NSButton(title: "Start voice", target: nil, action: nil)
-    let muteButton = NSButton(checkboxWithTitle: "Mute microphone", target: nil, action: nil)
-    let chatButton = NSButton(title: "Show chat", target: nil, action: nil)
+    let follow = NSSwitch()
+    let pause = NSSwitch()
+    let desktopMode = NSSwitch()
+    var desktopMenuItem: NSMenuItem!
+    let miniVoiceButton = MiniButton(symbol: "mic.fill", toolTip: "Start voice", fill: .controlAccentColor)
+    let showWindowButton = MiniButton(symbol: "macwindow", toolTip: "Show window (Esc)")
+    var miniBar: NSView!
+    static let titledStyle: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+    static let windowBackground = NSColor(calibratedWhite: 0.98, alpha: 1)
+    static let avatarBackground = MTLClearColorMake(0.93, 0.94, 0.95, 1)
+    let voiceButton = VoiceButton()
+    let muteButton = BarButton(symbol: "mic.slash", title: "Mute", toolTip: "Mute microphone")
+    let chatButton = BarButton(symbol: "bubble.left.and.bubble.right", title: "Chat", toolTip: "Show chat (⇧⌘C)")
+    let memoryButton = BarButton(symbol: "brain.head.profile", title: "Memory",
+                                 toolTip: "Saved memories · each character keeps their own")
+    let characterButton = BarButton(symbol: "person.crop.circle", title: "Character", toolTip: "Choose character")
+    let faceButton = BarButton(symbol: "face.smiling", title: "Expressions", toolTip: "Emotions, expressions and motions")
+    let viewButton = BarButton(symbol: "slider.horizontal.3", title: "View", toolTip: "View options")
+    var controlBar: NSView!
+    var statusView: NSView!
+    var captionsView: NSView!
+    let statusDot = StatusDot()
+    var panels: [NSButton: NSPopover] = [:]
+    var emotionChips: ChipGrid!
+    var expressionChips: ChipGrid!
+    var motionChips: ChipGrid!
     var chatMenuItem: NSMenuItem!
     var chatWindow: NSWindow?
     var chatScroll: NSScrollView?
@@ -35,8 +56,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     let voiceStatus = NSTextField(wrappingLabelWithString: "Voice off")
     let userCaption = NSTextField(wrappingLabelWithString: "")
     let assistantCaption = NSTextField(wrappingLabelWithString: "")
-    let emotionPicker = NSPopUpButton()
-    let automaticEmotion = NSButton(checkboxWithTitle: "Automatic emotions", target: nil, action: nil)
+    let captionHint = NSTextField(wrappingLabelWithString: "Listening… try “smile” or “pause animation”.")
+    var voiceLive = false
+    var lastPanelClose: (popover: NSPopover, time: CFTimeInterval)?
+    let emotionPicker = ObservedPopUpButton()
+    let automaticEmotion = NSSwitch()
     var emotionDirector: EmotionDirector?
     var transientVoiceExpression = false
     var voice: GPTLiveClient?
@@ -113,17 +137,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         chatMenuItem = windowMenu.addItem(withTitle: "Show Chat", action: #selector(toggleChat), keyEquivalent: "c")
         chatMenuItem.keyEquivalentModifierMask = [.command, .shift]
         chatMenuItem.target = self
+        desktopMenuItem = windowMenu.addItem(withTitle: "Desktop Mode", action: #selector(toggleDesktopMode(_:)), keyEquivalent: "d")
+        desktopMenuItem.keyEquivalentModifierMask = [.command, .shift]
+        desktopMenuItem.target = self
         NSApp.windowsMenu = windowMenu
         NSApp.mainMenu = menu
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 850),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.minSize = NSSize(width: 760, height: 760)
+        window = AvatarWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 860),
+                              styleMask: Self.titledStyle, backing: .buffered, defer: false)
+        window.contentMinSize = NSSize(width: 760, height: 640)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .aqua)
-        window.backgroundColor = NSColor(calibratedWhite: 0.98, alpha: 1)
+        window.backgroundColor = Self.windowBackground
         window.acceptsMouseMovedEvents = true
+        window.isMovableByWindowBackground = false
         let content = NSView()
+        content.wantsLayer = true
         window.contentView = content
         metalView = AvatarMetalView(frame: .zero, device: renderer.device)
         metalView.renderer = renderer
@@ -132,92 +163,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         metalView.depthStencilPixelFormat = .depth32Float
         metalView.sampleCount = 1
         metalView.preferredFramesPerSecond = 60
-        metalView.clearColor = MTLClearColorMake(0.93, 0.94, 0.95, 1)
+        metalView.clearColor = Self.avatarBackground
         metalView.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(metalView)
 
-        let sidebarScroll = NSScrollView()
-        sidebarScroll.hasVerticalScroller = true
-        sidebarScroll.drawsBackground = true
-        sidebarScroll.backgroundColor = window.backgroundColor
-        sidebarScroll.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(sidebarScroll)
-        let sidebar = NSStackView()
-        sidebar.orientation = .vertical
-        sidebar.alignment = .leading
-        sidebar.spacing = 14
-        sidebar.translatesAutoresizingMaskIntoConstraints = false
-        sidebarScroll.documentView = sidebar
+        // The avatar fills the window; controls float over it and open their panels as popovers.
+        controlBar = buildControlBar()
+        statusView = buildStatusView()
+        captionsView = buildCaptionsView()
+        miniBar = buildMiniBar()
+        for view in [statusView!, captionsView!, controlBar!, miniBar!] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            content.addSubview(view)
+        }
+        let shadow = FloatingSurface.shadowMargin
+        let titlebar = window.contentLayoutGuide as! NSLayoutGuide
         NSLayoutConstraint.activate([
             metalView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            metalView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             metalView.topAnchor.constraint(equalTo: content.topAnchor),
             metalView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            metalView.trailingAnchor.constraint(equalTo: sidebarScroll.leadingAnchor, constant: -24),
-            sidebarScroll.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
-            sidebarScroll.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
-            sidebarScroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-            sidebarScroll.widthAnchor.constraint(equalToConstant: 270),
-            sidebar.leadingAnchor.constraint(equalTo: sidebarScroll.contentView.leadingAnchor),
-            sidebar.topAnchor.constraint(equalTo: sidebarScroll.contentView.topAnchor),
-            sidebar.widthAnchor.constraint(equalTo: sidebarScroll.widthAnchor, constant: -16)
+            statusView.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14 - shadow),
+            statusView.topAnchor.constraint(equalTo: titlebar.topAnchor, constant: 6 - shadow),
+            controlBar.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            controlBar.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: shadow - 18),
+            miniBar.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            miniBar.bottomAnchor.constraint(equalTo: controlBar.bottomAnchor),
+            captionsView.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            captionsView.bottomAnchor.constraint(equalTo: controlBar.topAnchor, constant: shadow * 2 - 10),
+            captionsView.widthAnchor.constraint(lessThanOrEqualTo: content.widthAnchor, constant: shadow * 2 - 32)
         ])
-        modelLabel = label("", size: 11, secondary: true)
-        sidebar.addArrangedSubview(modelLabel)
-        sidebar.addArrangedSubview(label("Avatar studio", size: 25))
-        sidebar.addArrangedSubview(label("Live2D · Native Metal", secondary: true))
-        avatarPicker.target = self; avatarPicker.action = #selector(changeAvatar)
-        sidebar.addArrangedSubview(avatarPicker)
-        modelStats = label("", secondary: true)
-        sidebar.addArrangedSubview(modelStats)
-
-        voiceButton.target = self; voiceButton.action = #selector(toggleVoice)
-        sidebar.addArrangedSubview(voiceButton)
-        chatButton.target = self; chatButton.action = #selector(toggleChat)
-        sidebar.addArrangedSubview(chatButton)
-        sidebar.addArrangedSubview(NSButton(title: "Saved memories…", target: self, action: #selector(showMemories)))
-        muteButton.target = self; muteButton.action = #selector(toggleMicrophone)
-        muteButton.isEnabled = false
-        sidebar.addArrangedSubview(muteButton)
-        voiceStatus.font = .systemFont(ofSize: 12)
-        voiceStatus.textColor = .secondaryLabelColor
-        sidebar.addArrangedSubview(voiceStatus)
-        for caption in [userCaption, assistantCaption] {
-            caption.font = .systemFont(ofSize: 12)
-            caption.maximumNumberOfLines = 4
-            sidebar.addArrangedSubview(caption)
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.renderer.transparent, event.window === self.window, event.keyCode == 53 else { return event }
+            self.setDesktopMode(false)
+            return nil
         }
-        sidebar.addArrangedSubview(label("Try “smile” or “pause animation”.", size: 11, secondary: true))
-        automaticEmotion.state = .on
-        automaticEmotion.target = self; automaticEmotion.action = #selector(toggleAutomaticEmotion)
-        sidebar.addArrangedSubview(automaticEmotion)
-        sidebar.addArrangedSubview(label("Emotion"))
-        emotionPicker.addItems(withTitles: ["Manual pose"] + AvatarEmotion.allCases.map(\.title))
-        emotionPicker.target = self; emotionPicker.action = #selector(changeEmotion)
-        sidebar.addArrangedSubview(emotionPicker)
-        follow.target = self; follow.action = #selector(toggleFollow(_:))
-        follow.state = renderer.followsMouse ? .on : .off
-        sidebar.addArrangedSubview(follow)
-        pause.target = self; pause.action = #selector(togglePause(_:))
-        sidebar.addArrangedSubview(pause)
-        sidebar.addArrangedSubview(label("Expression"))
-        expression.target = self; expression.action = #selector(changeExpression)
-        sidebar.addArrangedSubview(expression)
-        sidebar.addArrangedSubview(label("Motion"))
-        sidebar.addArrangedSubview(motions)
-        play.target = self; play.action = #selector(playMotion)
-        sidebar.addArrangedSubview(play)
-        sidebar.addArrangedSubview(label("Mouth opening"))
-        mouth.target = self; mouth.action = #selector(changeMouth)
-        mouth.isContinuous = true
-        sidebar.addArrangedSubview(mouth)
-        sidebar.addArrangedSubview(NSButton(title: "Reset pose & view", target: self, action: #selector(reset)))
-        sidebar.addArrangedSubview(label("Move the mouse to look around.\nDrag to reposition. Scroll to zoom.", secondary: true))
-        modelCredits = label("", size: 11, secondary: true)
-        sidebar.addArrangedSubview(modelCredits)
-        for control in [avatarPicker, expression, motions, mouth, voiceStatus, userCaption, assistantCaption, emotionPicker] as [NSView] {
-            control.widthAnchor.constraint(equalTo: sidebar.widthAnchor).isActive = true
-        }
+        buildPanels()
         refreshModelControls()
+        refreshCaptions()
+        refreshOverlays()
         window.center()
         if show {
             window.makeKeyAndOrderFront(nil)
@@ -225,12 +209,251 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         }
     }
 
+    func buildControlBar() -> NSView {
+        let surface = FloatingSurface()
+        surface.cornerRadius = 24
+        for button in [characterButton, faceButton, viewButton] {
+            button.target = self; button.action = #selector(togglePanel(_:))
+        }
+        voiceButton.target = self; voiceButton.action = #selector(toggleVoice)
+        muteButton.setButtonType(.pushOnPushOff)
+        muteButton.target = self; muteButton.action = #selector(toggleMicrophone)
+        muteButton.isEnabled = false
+        chatButton.target = self; chatButton.action = #selector(toggleChat)
+        memoryButton.target = self; memoryButton.action = #selector(showMemories)
+        // Equal-width side groups keep the voice button centered.
+        let leading = NSStackView(), trailing = NSStackView()
+        for view in [characterButton, faceButton, viewButton] { leading.addView(view, in: .trailing) }
+        for view in [muteButton, chatButton, memoryButton] { trailing.addView(view, in: .leading) }
+        for group in [leading, trailing] {
+            group.spacing = 2
+            group.setHuggingPriority(.defaultLow, for: .horizontal)
+        }
+        let bar = NSStackView(views: [leading, voiceButton, trailing])
+        bar.spacing = 18
+        bar.alignment = .centerY
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(bar)
+        let inset = FloatingSurface.shadowMargin
+        NSLayoutConstraint.activate([
+            leading.widthAnchor.constraint(equalTo: trailing.widthAnchor),
+            bar.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: inset + 12),
+            bar.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -inset - 12),
+            bar.topAnchor.constraint(equalTo: surface.topAnchor, constant: inset + 8),
+            bar.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -inset - 8)
+        ])
+        return surface
+    }
+
+    /// Desktop mode keeps only voice and a way back to the full window.
+    func buildMiniBar() -> NSView {
+        let surface = FloatingSurface()
+        surface.cornerRadius = 25
+        miniVoiceButton.target = self; miniVoiceButton.action = #selector(toggleVoice)
+        showWindowButton.target = self; showWindowButton.action = #selector(toggleDesktopMode(_:))
+        let row = NSStackView(views: [miniVoiceButton, showWindowButton])
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(row)
+        let inset = FloatingSurface.shadowMargin + 6
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: inset),
+            row.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -inset),
+            row.topAnchor.constraint(equalTo: surface.topAnchor, constant: inset),
+            row.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -inset)
+        ])
+        return surface
+    }
+
+    func buildStatusView() -> NSView {
+        let surface = FloatingSurface()
+        surface.cornerRadius = 16
+        modelLabel = NSTextField(labelWithString: "")
+        modelLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        voiceStatus.font = .systemFont(ofSize: 11)
+        voiceStatus.textColor = .secondaryLabelColor
+        voiceStatus.maximumNumberOfLines = 2
+        voiceStatus.preferredMaxLayoutWidth = 260
+        let text = NSStackView(views: [modelLabel, voiceStatus])
+        text.orientation = .vertical
+        text.alignment = .leading
+        text.spacing = 1
+        let row = NSStackView(views: [statusDot, text])
+        row.spacing = 9
+        row.alignment = .centerY
+        row.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(row)
+        let inset = FloatingSurface.shadowMargin
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: inset + 12),
+            row.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -inset - 14),
+            row.topAnchor.constraint(equalTo: surface.topAnchor, constant: inset + 7),
+            row.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -inset - 7)
+        ])
+        return surface
+    }
+
+    func buildCaptionsView() -> NSView {
+        let surface = FloatingSurface()
+        surface.cornerRadius = 16
+        captionHint.font = .systemFont(ofSize: 12)
+        captionHint.textColor = .secondaryLabelColor
+        userCaption.font = .systemFont(ofSize: 12)
+        userCaption.textColor = .secondaryLabelColor
+        userCaption.maximumNumberOfLines = 3
+        assistantCaption.font = .systemFont(ofSize: 14)
+        assistantCaption.maximumNumberOfLines = 4
+        for caption in [captionHint, userCaption, assistantCaption] { caption.preferredMaxLayoutWidth = 540 }
+        let stack = NSStackView(views: [captionHint, userCaption, assistantCaption])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.detachesHiddenViews = true
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(stack)
+        let inset = FloatingSurface.shadowMargin
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: inset + 16),
+            stack.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -inset - 16),
+            stack.topAnchor.constraint(equalTo: surface.topAnchor, constant: inset + 10),
+            stack.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -inset - 10)
+        ])
+        return surface
+    }
+
+    func buildPanels() {
+        func popover(_ controller: NSViewController) -> NSPopover {
+            let popover = NSPopover()
+            popover.behavior = .transient
+            popover.animates = true
+            popover.appearance = NSAppearance(named: .aqua)
+            popover.contentViewController = controller
+            popover.delegate = self
+            return popover
+        }
+
+        avatarPicker.target = self; avatarPicker.action = #selector(changeAvatar)
+        avatarPicker.segmentDistribution = .fillEqually
+        avatarPicker.controlSize = .large
+        modelStats = PanelLayout.text("", width: 264)
+        modelCredits = PanelLayout.text("", size: 11, width: 264)
+        panels[characterButton] = popover(PanelLayout.panel(width: 300, [
+            PanelLayout.header("Character"), avatarPicker, modelStats, modelCredits
+        ], gaps: [modelStats: 18]))
+
+        automaticEmotion.state = .on
+        automaticEmotion.target = self; automaticEmotion.action = #selector(toggleAutomaticEmotion)
+        emotionPicker.addItems(withTitles: ["Manual pose"] + AvatarEmotion.allCases.map(\.title))
+        emotionChips = ChipGrid(columns: 3, target: self, action: #selector(chooseEmotion(_:)))
+        emotionChips.setItems(AvatarEmotion.allCases.map { ($0.title, nil) })
+        expressionChips = ChipGrid(columns: 3, target: self, action: #selector(chooseExpression(_:)))
+        motionChips = ChipGrid(columns: 3, target: self, action: #selector(chooseMotion(_:)))
+        for model in [emotionPicker, expression, motions] { model.onSelect = { [weak self] in self?.syncChips() } }
+        mouth.target = self; mouth.action = #selector(changeMouth)
+        mouth.isContinuous = true
+        let automatic = PanelLayout.switchRow("Automatic emotions", detail: "Reacts to the conversation while talking",
+                                              toggle: automaticEmotion)
+        panels[faceButton] = popover(PanelLayout.panel(width: 372, [
+            automatic,
+            PanelLayout.header("Emotion"), emotionChips,
+            PanelLayout.header("Expression"), expressionChips,
+            PanelLayout.header("Motion"), motionChips,
+            PanelLayout.header("Mouth opening"), mouth
+        ], gaps: [automatic: 18, emotionChips: 18, expressionChips: 18, motionChips: 18]))
+
+        follow.target = self; follow.action = #selector(toggleFollow(_:))
+        follow.state = renderer.followsMouse ? .on : .off
+        let followRow = PanelLayout.switchRow("Follow mouse", detail: "Eyes and head track the pointer", toggle: follow)
+        pause.target = self; pause.action = #selector(togglePause(_:))
+        let pauseRow = PanelLayout.switchRow("Pause animation", detail: "Freeze the avatar", toggle: pause)
+        desktopMode.target = self; desktopMode.action = #selector(toggleDesktopMode(_:))
+        let desktopRow = PanelLayout.switchRow("Desktop mode", detail: "Avatar only, with voice and window buttons",
+                                               toggle: desktopMode)
+        let reset = NSButton(title: "Reset pose & view", target: self, action: #selector(reset))
+        panels[viewButton] = popover(PanelLayout.panel(width: 290, [
+            followRow, pauseRow, desktopRow, reset,
+            PanelLayout.text("Drag to reposition, scroll to zoom. In desktop mode, drag moves the window and scrolling is off.",
+                             size: 11, width: 254)
+        ], gaps: [desktopRow: 16]))
+    }
+
+    @objc func togglePanel(_ sender: NSButton) {
+        guard let popover = panels[sender], let view = popover.contentViewController?.view else { return }
+        // A transient popover closes on the same click that would reopen it.
+        if popover.isShown || (lastPanelClose?.popover === popover && CACurrentMediaTime() - lastPanelClose!.time < 0.3) {
+            popover.performClose(sender)
+            return
+        }
+        view.layoutSubtreeIfNeeded()
+        popover.contentSize = view.fittingSize
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: sender.isFlipped ? .minY : .maxY)
+        (sender as? BarButton)?.isActive = true
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        guard let popover = notification.object as? NSPopover else { return }
+        lastPanelClose = (popover, CACurrentMediaTime())
+        for (button, panel) in panels where panel === popover { (button as? BarButton)?.isActive = false }
+    }
+
+    @objc func toggleDesktopMode(_ sender: Any?) {
+        // The switch has already flipped its own state; the menu item toggles the current mode.
+        setDesktopMode(sender is NSSwitch ? desktopMode.state == .on : !renderer.transparent)
+    }
+
+    /// Desktop mode drops the chrome, shadow and background so only the avatar floats over the desktop.
+    func setDesktopMode(_ on: Bool) {
+        desktopMode.state = on ? .on : .off
+        desktopMenuItem.state = desktopMode.state
+        guard on != renderer.transparent else { return }
+        let frame = window.frame
+        renderer.transparent = on
+        window.styleMask = on ? [.borderless, .resizable] : Self.titledStyle
+        window.setFrame(frame, display: false)
+        window.isOpaque = !on
+        window.backgroundColor = on ? .clear : Self.windowBackground
+        window.hasShadow = !on
+        window.level = on ? .floating : .normal
+        metalView.layer?.isOpaque = !on
+        metalView.clearColor = on ? MTLClearColorMake(0, 0, 0, 0) : Self.avatarBackground
+        metalView.movesWindow = on
+        if on { panels.values.forEach { $0.close() } }
+        if window.isVisible { window.makeKeyAndOrderFront(nil) }
+        refreshOverlays()
+    }
+
+    /// Desktop mode swaps the full bar and status for the two-button pill.
+    func refreshOverlays() {
+        statusView.isHidden = renderer.transparent
+        controlBar.isHidden = renderer.transparent
+        miniBar.isHidden = !renderer.transparent
+    }
+
+    @objc func chooseEmotion(_ sender: NSButton) { emotionPicker.selectItem(at: sender.tag + 1); changeEmotion() }
+    @objc func chooseExpression(_ sender: NSButton) { expression.selectItem(at: sender.tag); changeExpression() }
+    @objc func chooseMotion(_ sender: NSButton) { motions.selectItem(at: sender.tag); playMotion() }
+
+    func syncChips() {
+        emotionChips?.select(emotionPicker.indexOfSelectedItem - 1)
+        expressionChips?.select(expression.indexOfSelectedItem)
+        motionChips?.select(motionItems.isEmpty ? nil : motions.indexOfSelectedItem)
+    }
+
+    func refreshCaptions() {
+        let empty = userCaption.stringValue.isEmpty && assistantCaption.stringValue.isEmpty
+        captionHint.isHidden = !empty
+        userCaption.isHidden = userCaption.stringValue.isEmpty
+        assistantCaption.isHidden = assistantCaption.stringValue.isEmpty
+        captionsView.isHidden = !voiceLive
+    }
+
     func refreshModelControls() {
         window.title = "Live2D Avatar · \(renderer.modelName)"
         chatWindow?.subtitle = renderer.avatar?.persona.name ?? renderer.modelName
         avatarPicker.selectedSegment = renderer.avatar.flatMap { availableAvatars.firstIndex(of: $0) } ?? -1
-        modelLabel.stringValue = renderer.modelName.uppercased()
-        modelStats.stringValue = "\(renderer.model.parameterCount) parameters\n\(renderer.model.drawableCount) drawable meshes"
+        modelLabel.stringValue = renderer.avatar?.persona.name ?? renderer.modelName
+        characterButton.title = renderer.avatar?.persona.name ?? "Character"
+        modelStats.stringValue = "\(renderer.avatar?.title ?? "Custom model") · \(renderer.model.parameterCount) parameters · \(renderer.model.drawableCount) meshes"
         modelCredits.stringValue = renderer.avatar?.credits ?? "Model: \(renderer.modelName)"
         expression.removeAllItems()
         expression.addItem(withTitle: "Neutral")
@@ -252,11 +475,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         if motionItems.isEmpty { motions.addItem(withTitle: "No motions") }
         if renderer.avatar != nil { motions.selectItem(withTitle: "Smile") }
         motions.isEnabled = !motionItems.isEmpty
-        play.isEnabled = !motionItems.isEmpty
         mouth.doubleValue = 0
         emotionPicker.selectItem(withTitle: renderer.emotion?.title ?? "Manual pose")
         automaticEmotion.isEnabled = renderer.avatar != nil
         emotionPicker.isEnabled = renderer.avatar != nil
+        emotionChips.chips.forEach { $0.isEnabled = renderer.avatar != nil }
+        expressionChips.setItems(expression.itemArray.map { ($0.title, $0.toolTip) })
+        motionChips.setItems(motionItems.isEmpty ? [] : motions.itemTitles.map { ($0, nil) })
+        syncChips()
     }
 
     @objc func changeAvatar() {
@@ -283,12 +509,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         refreshModelControls()
     }
 
-    @objc func toggleFollow(_ sender: NSButton) {
+    @objc func toggleFollow(_ sender: NSSwitch) {
         defer { updateResponsesContext() }
         renderer.followsMouse = sender.state == .on
         renderer.model.dragX = 0; renderer.model.dragY = 0
     }
-    @objc func togglePause(_ sender: NSButton) { renderer.paused = sender.state == .on; updateResponsesContext() }
+    @objc func togglePause(_ sender: NSSwitch) {
+        renderer.paused = sender.state == .on
+        updateResponsesContext()
+    }
     @objc func changeExpression() {
         defer { updateResponsesContext() }
         useManualEmotion()
@@ -300,6 +529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     }
     @objc func playMotion() {
         defer { updateResponsesContext() }
+        if pause.state == .on { pause.state = .off; togglePause(pause) }
         useManualEmotion()
         startSelectedMotion()
     }
@@ -435,7 +665,8 @@ extension AppDelegate {
     }
 
     func refreshChatVisibility() {
-        chatButton.title = chatIsVisible ? "Hide chat" : "Show chat"
+        chatButton.isActive = chatIsVisible
+        chatButton.toolTip = chatIsVisible ? "Hide chat (⇧⌘C)" : "Show chat (⇧⌘C)"
         chatMenuItem?.title = chatIsVisible ? "Hide Chat" : "Show Chat"
     }
 
@@ -523,6 +754,9 @@ extension AppDelegate {
         ])
         chat.center()
         content.layoutSubtreeIfNeeded()
+        // The clip view grows from zero during layout; width autoresizing would add that growth
+        // on top of the initial frame, so match the visible width once.
+        text.setFrameSize(NSSize(width: scroll.contentSize.width, height: text.frame.height))
         renderChat()
     }
 
@@ -532,6 +766,7 @@ extension AppDelegate {
         captionText[fragment.speaker] = text
         let caption = fragment.speaker == .user ? userCaption : assistantCaption
         caption.stringValue = "\(fragment.speaker == .user ? "You" : name): \(text.suffix(220))"
+        refreshCaptions()
         chatTranscript.append(fragment, characterName: name)
         chatNeedsRender = true
         scheduleChatRender()
@@ -769,8 +1004,10 @@ extension AppDelegate {
             }
             captionText.removeAll()
             userCaption.stringValue = ""; assistantCaption.stringValue = ""
+            refreshCaptions()
             clearChat()
             muteButton.state = .off
+            muteButton.isActive = false
             client.onStateChange = { [weak self, weak client] state in
                 guard let self, let client, self.voice === client else { return }
                 self.refreshVoiceControls(state)
@@ -822,6 +1059,8 @@ extension AppDelegate {
 
     @objc func toggleMicrophone() {
         voice?.setMuted(muteButton.state == .on)
+        muteButton.isActive = muteButton.state == .on
+        muteButton.title = muteButton.state == .on ? "Muted" : "Mute"
         if voice?.state == .connected {
             voiceStatus.stringValue = muteButton.state == .on ? "Voice connected · microphone muted" : "Voice connected · microphone live"
             syncChatStatus()
@@ -829,16 +1068,27 @@ extension AppDelegate {
     }
 
     func refreshVoiceControls(_ state: GPTLiveClient.State) {
-        defer { syncChatStatus() }
+        defer { syncChatStatus(); refreshCaptions() }
         voiceButton.isEnabled = state != .closing
         muteButton.isEnabled = state == .connected
+        voiceLive = state == .connected
+        voiceButton.isActive = state == .connecting || state == .connected
+        voiceButton.symbol = voiceButton.isActive ? "xmark" : "mic.fill"
+        voiceButton.toolTip = voiceButton.isActive ? "End the voice session" : "Talk with the avatar"
+        miniVoiceButton.isEnabled = voiceButton.isEnabled
+        miniVoiceButton.symbol = voiceButton.symbol
+        miniVoiceButton.fill = voiceButton.isActive ? NSColor(calibratedWhite: 0.42, alpha: 1) : .controlAccentColor
+        miniVoiceButton.toolTip = voiceButton.isActive ? "Cancel voice" : "Start voice"
+        statusDot.color = state == .connected ? .systemGreen
+            : state == .connecting || state == .closing ? .systemOrange : .tertiaryLabelColor
+        if case .failed = state { statusDot.color = .systemRed }
         switch state {
         case .idle: voiceStatus.stringValue = "Voice off"
         case .connecting:
             voiceButton.title = "Cancel voice"
             voiceStatus.stringValue = "Connecting…"
         case .connected:
-            voiceButton.title = "Stop voice"
+            voiceButton.title = "Cancel voice"
             voiceStatus.stringValue = "Voice connected · microphone live"
             updateVoiceIdentity()
             if let voice { try? voice.append(ResponsesDelegationHandler.brief(voiceContext)) }
@@ -940,6 +1190,349 @@ extension AppDelegate {
         default: throw ViewerError.message("That avatar action is not supported.")
         }
         return "Completed \(command.action) \(value). \(voiceContext)"
+    }
+}
+
+/// Main avatar window. A borderless window (desktop mode) must opt in to key status for popovers and shortcuts.
+final class AvatarWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
+/// Rounded translucent surface floating over the avatar. Drawn in `draw(_:)` rather than with layer
+/// properties so smoke-test captures (`cacheDisplay`) match the window.
+final class FloatingSurface: NSView {
+    static let shadowMargin: CGFloat = 10
+    var cornerRadius: CGFloat = 20
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: Self.shadowMargin, dy: Self.shadowMargin)
+        let path = NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.14)
+        shadow.shadowBlurRadius = 9
+        shadow.shadowOffset = NSSize(width: 0, height: -2)
+        shadow.set()
+        NSColor(calibratedWhite: 1, alpha: 0.9).setFill()
+        path.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.black.withAlphaComponent(0.07).setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+}
+
+/// Icon-over-label button for the control bar. `isActive` marks an open panel or a running feature.
+final class BarButton: NSButton {
+    var isActive = false { didSet { contentTintColor = isActive ? .controlAccentColor : .labelColor; needsDisplay = true } }
+    private var hovering = false { didSet { needsDisplay = true } }
+    private var hoverArea: NSTrackingArea?
+    private var symbol = ""
+
+    init(symbol: String, title: String, toolTip: String) {
+        super.init(frame: .zero)
+        self.title = title
+        self.toolTip = toolTip
+        setSymbol(symbol)
+        imagePosition = .imageAbove
+        isBordered = false
+        font = .systemFont(ofSize: 10.5, weight: .medium)
+        contentTintColor = .labelColor
+        (cell as? NSButtonCell)?.highlightsBy = []
+        (cell as? NSButtonCell)?.showsStateBy = []
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 76), heightAnchor.constraint(equalToConstant: 50)])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setSymbol(_ name: String) {
+        symbol = name
+        image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        needsDisplay = true
+    }
+
+    override var title: String { didSet { needsDisplay = true } }
+    override var isHighlighted: Bool { didSet { needsDisplay = true } }
+    override var isEnabled: Bool { didSet { needsDisplay = true } }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+    override func mouseEntered(with event: NSEvent) { hovering = isEnabled }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isActive || (isEnabled && (hovering || isHighlighted)) {
+            let fill = isActive ? NSColor.controlAccentColor.withAlphaComponent(isHighlighted ? 0.22 : 0.13)
+                : NSColor.black.withAlphaComponent(isHighlighted ? 0.1 : 0.05)
+            fill.setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 11, yRadius: 11).fill()
+        }
+        // The cell's imageAbove layout sits off-centre in a fixed frame, so the icon and label are
+        // drawn here as one block centred in the button.
+        let tint = isEnabled ? contentTintColor ?? .labelColor : .tertiaryLabelColor
+        drawCentered(in: self, symbol: symbol, pointSize: 17, weight: .regular, title: title,
+                     font: font ?? .systemFont(ofSize: 10.5), color: tint, vertical: true, spacing: 4)
+    }
+}
+
+/// Primary pill in the middle of the bar: Start voice, then Cancel voice while a session runs.
+final class VoiceButton: NSButton {
+    var isActive = false { didSet { needsDisplay = true } }
+    var symbol = "mic.fill" { didSet { needsDisplay = true } }
+
+    init() {
+        super.init(frame: .zero)
+        title = "Start voice"
+        toolTip = "Talk with the avatar"
+        isBordered = false
+        imagePosition = .noImage
+        (cell as? NSButtonCell)?.highlightsBy = []
+        (cell as? NSButtonCell)?.showsStateBy = []
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 172), heightAnchor.constraint(equalToConstant: 52)])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var title: String { didSet { needsDisplay = true } }
+    override var isHighlighted: Bool { didSet { needsDisplay = true } }
+    override var isEnabled: Bool { didSet { needsDisplay = true } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: 1, dy: 1)
+        let pill = NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2)
+        (isActive ? NSColor(calibratedWhite: 0.42, alpha: 1) : .controlAccentColor).withAlphaComponent(isEnabled ? 1 : 0.45).setFill()
+        pill.fill()
+        if isHighlighted {
+            NSColor.black.withAlphaComponent(0.14).setFill()
+            pill.fill()
+        }
+        drawCentered(in: self, symbol: symbol, pointSize: 16, weight: .semibold, title: title,
+                     font: .systemFont(ofSize: 15, weight: .semibold), color: .white, vertical: false, spacing: 8)
+    }
+}
+
+/// Small round icon button for the desktop-mode pill. `fill` nil draws a white bordered circle.
+final class MiniButton: NSButton {
+    var symbol: String { didSet { needsDisplay = true } }
+    var fill: NSColor? { didSet { needsDisplay = true } }
+
+    init(symbol: String, toolTip: String, fill: NSColor? = nil) {
+        self.symbol = symbol
+        self.fill = fill
+        super.init(frame: .zero)
+        title = ""
+        self.toolTip = toolTip
+        setAccessibilityLabel(toolTip)
+        isBordered = false
+        imagePosition = .noImage
+        (cell as? NSButtonCell)?.highlightsBy = []
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 38), heightAnchor.constraint(equalToConstant: 38)])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var isHighlighted: Bool { didSet { needsDisplay = true } }
+    override var isEnabled: Bool { didSet { needsDisplay = true } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1))
+        (fill ?? .white).withAlphaComponent(isEnabled ? 1 : 0.45).setFill()
+        circle.fill()
+        if fill == nil {
+            NSColor.black.withAlphaComponent(0.14).setStroke()
+            circle.stroke()
+        }
+        if isHighlighted {
+            NSColor.black.withAlphaComponent(0.14).setFill()
+            circle.fill()
+        }
+        drawCentered(in: self, symbol: symbol, pointSize: 14, weight: .semibold, title: "", font: .systemFont(ofSize: 1),
+                     color: fill == nil ? NSColor(calibratedWhite: 0.16, alpha: 1) : .white, vertical: false, spacing: 0)
+    }
+}
+
+/// Draws a symbol and a label as one block centred in `view`, stacked or side by side.
+private func drawCentered(in view: NSView, symbol: String, pointSize: CGFloat, weight: NSFont.Weight, title: String,
+                          font: NSFont, color: NSColor, vertical: Bool, spacing: CGFloat) {
+    let bounds = view.bounds
+    let icon = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+        .withSymbolConfiguration(.init(pointSize: pointSize, weight: weight).applying(.init(paletteColors: [color])))
+    let style = NSMutableParagraphStyle()
+    style.alignment = .center
+    style.lineBreakMode = .byTruncatingTail
+    let label = NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: style])
+    let iconSize = icon?.size ?? .zero
+    let labelSize = NSSize(width: min(ceil(label.size().width), bounds.width - 8), height: ceil(label.size().height))
+    let gap = icon == nil || title.isEmpty ? 0 : spacing
+    // Positions are measured from the top-left, then converted for unflipped views.
+    func place(_ x: CGFloat, _ top: CGFloat, _ size: NSSize) -> NSRect {
+        NSRect(x: x, y: view.isFlipped ? top : bounds.height - top - size.height, width: size.width, height: size.height)
+    }
+    let iconRect: NSRect, labelRect: NSRect
+    if vertical {
+        // A fixed icon box keeps labels on one baseline across symbols of different heights.
+        let box = ceil(pointSize * 1.3)
+        let top = floor((bounds.height - box - gap - labelSize.height) / 2)
+        iconRect = place(round((bounds.width - iconSize.width) / 2), top + round((box - iconSize.height) / 2), iconSize)
+        labelRect = place(round((bounds.width - labelSize.width) / 2), top + box + gap, labelSize)
+    } else {
+        let left = round((bounds.width - iconSize.width - gap - labelSize.width) / 2)
+        iconRect = place(left, round((bounds.height - iconSize.height) / 2), iconSize)
+        labelRect = place(left + iconSize.width + gap, round((bounds.height - labelSize.height) / 2), labelSize)
+    }
+    icon?.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    label.draw(with: labelRect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+}
+
+/// Voice connection indicator in the status pill.
+final class StatusDot: NSView {
+    var color: NSColor = .tertiaryLabelColor { didSet { needsDisplay = true } }
+    override var intrinsicContentSize: NSSize { NSSize(width: 8, height: 8) }
+    override func draw(_ dirtyRect: NSRect) {
+        color.setFill()
+        NSBezierPath(ovalIn: bounds).fill()
+    }
+}
+
+/// Selectable pill used by panel grids. The owner keeps the selection model.
+final class ChipButton: NSButton {
+    var isSelected = false { didSet { needsDisplay = true } }
+
+    override var isHighlighted: Bool { didSet { needsDisplay = true } }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 28) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 8, yRadius: 8)
+        let fill = isSelected ? NSColor.controlAccentColor
+            : NSColor.black.withAlphaComponent(isHighlighted ? 0.12 : isEnabled ? 0.05 : 0.03)
+        fill.setFill()
+        path.fill()
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        style.lineBreakMode = .byTruncatingTail
+        let text = NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: isSelected ? .semibold : .regular),
+            .foregroundColor: isSelected ? NSColor.white : isEnabled ? NSColor.labelColor : NSColor.tertiaryLabelColor,
+            .paragraphStyle: style])
+        let height = text.size().height
+        text.draw(in: NSRect(x: 6, y: (bounds.height - height) / 2, width: bounds.width - 12, height: height))
+    }
+}
+
+/// Equal-width chip rows. Chip tags are item indices, so callers route clicks through `sender.tag`.
+final class ChipGrid: NSStackView {
+    let columns: Int
+    private weak var chipTarget: AnyObject?
+    private let chipAction: Selector
+    private(set) var chips: [ChipButton] = []
+
+    init(columns: Int, target: AnyObject, action: Selector) {
+        self.columns = columns
+        chipTarget = target
+        chipAction = action
+        super.init(frame: .zero)
+        orientation = .vertical
+        alignment = .leading
+        spacing = 6
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setItems(_ items: [(title: String, toolTip: String?)]) {
+        arrangedSubviews.forEach { $0.removeFromSuperview() }
+        chips = items.enumerated().map { index, item in
+            let chip = ChipButton(title: item.title, target: chipTarget, action: chipAction)
+            chip.tag = index
+            chip.toolTip = item.toolTip ?? item.title
+            chip.isBordered = false
+            chip.setAccessibilityLabel(item.title)
+            return chip
+        }
+        for start in stride(from: 0, to: chips.count, by: columns) {
+            let row: [NSView] = Array(chips[start..<min(start + columns, chips.count)])
+            // Pad the final row so every chip keeps the same width.
+            let line = NSStackView(views: row + (row.count..<columns).map { _ in NSView() })
+            line.distribution = .fillEqually
+            line.spacing = 6
+            addArrangedSubview(line)
+            line.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
+        }
+    }
+
+    func select(_ index: Int?) {
+        for chip in chips { chip.isSelected = chip.tag == index }
+    }
+}
+
+/// Pop-up kept off-screen as the selection model behind a chip grid; reports every selection change.
+final class ObservedPopUpButton: NSPopUpButton {
+    var onSelect: (() -> Void)?
+    override func select(_ item: NSMenuItem?) { super.select(item); onSelect?() }
+    override func selectItem(at index: Int) { super.selectItem(at: index); onSelect?() }
+    override func selectItem(withTitle title: String) { super.selectItem(withTitle: title); onSelect?() }
+}
+
+/// Builders shared by the floating panels.
+enum PanelLayout {
+    static func header(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text.uppercased())
+        label.font = .systemFont(ofSize: 10.5, weight: .semibold)
+        label.textColor = .secondaryLabelColor
+        return label
+    }
+
+    static func text(_ text: String, size: CGFloat = 12, secondary: Bool = true, width: CGFloat) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = .systemFont(ofSize: size)
+        label.textColor = secondary ? .secondaryLabelColor : .labelColor
+        label.preferredMaxLayoutWidth = width
+        return label
+    }
+
+    static func switchRow(_ title: String, detail: String? = nil, toggle: NSSwitch) -> NSView {
+        toggle.controlSize = .small
+        let name = NSTextField(labelWithString: title)
+        name.font = .systemFont(ofSize: 13, weight: .medium)
+        let labels = NSStackView(views: [name])
+        labels.orientation = .vertical
+        labels.alignment = .leading
+        labels.spacing = 1
+        if let detail {
+            let note = NSTextField(labelWithString: detail)
+            note.font = .systemFont(ofSize: 11)
+            note.textColor = .secondaryLabelColor
+            labels.addArrangedSubview(note)
+        }
+        let row = NSStackView(views: [labels, NSView(), toggle])
+        row.distribution = .fill
+        row.alignment = .centerY
+        labels.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        return row
+    }
+
+    /// A fixed-width vertical panel whose children span the content width.
+    static func panel(width: CGFloat, _ views: [NSView], gaps: [NSView: CGFloat] = [:]) -> NSViewController {
+        let inset: CGFloat = 18
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.widthAnchor.constraint(equalToConstant: width).isActive = true
+        for view in views {
+            view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -inset * 2).isActive = true
+        }
+        for (view, gap) in gaps { stack.setCustomSpacing(gap, after: view) }
+        let controller = NSViewController()
+        controller.view = stack
+        return controller
     }
 }
 

@@ -59,46 +59,6 @@ func verifyPublicModel(renderer: AvatarRenderer, output: URL) throws {
     controller.automaticEmotion.state = .on
     controller.applyEmotion(.happy)
     for _ in 0..<120 { renderer.updateAnimation(deltaTime: 1.0 / 60) }
-    controller.window.contentView?.layoutSubtreeIfNeeded()
-    // Documentation captures include every control and creator credit, even when
-    // the normal window would need its sidebar scrolled.
-    if let content = controller.window.contentView,
-       let sidebar = content.subviews.compactMap({ $0 as? NSScrollView }).first {
-        let height = max(1000, ceil((sidebar.documentView?.fittingSize.height ?? 0) + 40))
-        let controlsWidth = content.bounds.width - controller.metalView.bounds.width
-        controller.window.setContentSize(NSSize(width: ceil(height * 1.15 + controlsWidth), height: height))
-        content.layoutSubtreeIfNeeded()
-    }
-    if let sidebar = controller.window.contentView?.subviews.compactMap({ $0 as? NSScrollView }).first,
-       let bitmap = sidebar.bitmapImageRepForCachingDisplay(in: sidebar.bounds) {
-        sidebar.cacheDisplay(in: sidebar.bounds, to: bitmap)
-        try bitmap.representation(using: .png, properties: [:])?.write(to: output.appendingPathComponent("controls.png"))
-    }
-    // AppKit view caching omits Metal layers. Capture both real rendering surfaces
-    // at the same layout and composite the GPU readback into its actual view frame.
-    if let content = controller.window.contentView,
-       let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) {
-        content.cacheDisplay(in: content.bounds, to: bitmap)
-        let frame = controller.metalView.convert(controller.metalView.bounds, to: content)
-        let renderURL = output.appendingPathComponent("avatar-view.png")
-        let width = Int(frame.width * 2), height = Int(frame.height * 2)
-        try renderer.savePNG(renderer.snapshot(width: width, height: height), to: renderURL, width: width, height: height)
-        let capture = NSImage(size: content.bounds.size)
-        capture.lockFocus()
-        controller.window.backgroundColor.setFill()
-        content.bounds.fill()
-        if let controlsImage = bitmap.cgImage {
-            NSImage(cgImage: controlsImage, size: content.bounds.size).draw(
-                in: content.bounds, from: .zero, operation: .sourceOver, fraction: 1)
-        }
-        NSColor(calibratedRed: 0.93, green: 0.94, blue: 0.95, alpha: 1).setFill()
-        frame.fill()
-        NSImage(contentsOf: renderURL)?.draw(in: frame)
-        capture.unlockFocus()
-        if let tiff = capture.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-            try png.write(to: output.appendingPathComponent("app-window.png"))
-        }
-    }
     var switchedModels: [String] = []
     if let original = renderer.avatar, controller.availableAvatars.contains(original) {
         for avatar in controller.availableAvatars {
@@ -115,10 +75,11 @@ func verifyPublicModel(renderer: AvatarRenderer, output: URL) throws {
         }
         try controller.selectAvatar(original)
     }
+    let controls = try verifyControlLayout(controller: controller, output: output)
     var report: [String: Any] = ["status": "passed", "model": renderer.modelName,
         "visiblePixels": visible, "animationChangesPixels": true, "motions": checkedMotions,
         "expressions": renderer.expressions.count, "device": renderer.device.name,
-        "switchedModels": switchedModels]
+        "switchedModels": switchedModels, "controls": controls]
     if let persona = renderer.avatar?.persona {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

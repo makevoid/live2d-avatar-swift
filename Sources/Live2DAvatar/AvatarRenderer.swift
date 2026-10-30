@@ -64,6 +64,8 @@ final class AvatarRenderer: NSObject, MTKViewDelegate {
     var panY = AvatarRenderer.initialPanY
     var paused = false
     var followsMouse = false
+    /// Desktop mode: omit scenery so only the avatar is drawn over a clear background.
+    var transparent = false
     private var lastTime = CACurrentMediaTime()
     private var frameworkStarted = false
     private(set) var emotion: AvatarEmotion? = .happy
@@ -166,7 +168,7 @@ final class AvatarRenderer: NSObject, MTKViewDelegate {
                         includesBackground: Bool = true) throws {
         let loadAction = pass.colorAttachments[0].loadAction
         defer { pass.colorAttachments[0].loadAction = loadAction }
-        if avatar == .creature && includesBackground {
+        if avatar == .creature && includesBackground && !transparent {
             try landscape.encode(command, pass: pass, size: size)
             // Cubism draws in a second pass; preserve the landscape beneath it.
             pass.colorAttachments[0].loadAction = .load
@@ -260,13 +262,20 @@ final class AvatarRenderer: NSObject, MTKViewDelegate {
         return pixels
     }
 
-    func savePNG(_ pixels: Data, to url: URL, width: Int = 900, height: Int = 1000) throws {
+    func image(_ pixels: Data, width: Int = 900, height: Int = 1000) throws -> CGImage {
         guard let provider = CGDataProvider(data: pixels as CFData),
               let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
                                   bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
                                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue).union(.byteOrder32Little),
-                                  provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent),
-              let target = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
+                                  provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else {
+            throw ViewerError.message("Cannot create an image from rendered pixels.")
+        }
+        return image
+    }
+
+    func savePNG(_ pixels: Data, to url: URL, width: Int = 900, height: Int = 1000) throws {
+        let image = try image(pixels, width: width, height: height)
+        guard let target = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
             throw ViewerError.message("Cannot create PNG at \(url.path)")
         }
         CGImageDestinationAddImage(target, image, nil)
@@ -276,8 +285,12 @@ final class AvatarRenderer: NSObject, MTKViewDelegate {
 
 final class AvatarMetalView: MTKView {
     weak var renderer: AvatarRenderer?
+    /// In desktop mode dragging moves the frameless window; the avatar never pans or zooms.
+    var movesWindow = false
     private var mouseArea: NSTrackingArea?
     override var acceptsFirstResponder: Bool { true }
+    // The first click on an inactive floating window must start a window drag, not a pan.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { movesWindow }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -295,13 +308,19 @@ final class AvatarMetalView: MTKView {
     override func mouseExited(with event: NSEvent) {
         renderer?.model.dragX = 0; renderer?.model.dragY = 0
     }
+    override func mouseDown(with event: NSEvent) {
+        // Outside desktop mode the press is kept here so it pans the avatar instead of reaching the window.
+        if movesWindow { window?.performDrag(with: event) }
+    }
+    // A non-opaque view lets AppKit drag the window from its background; only desktop mode allows that.
+    override var mouseDownCanMoveWindow: Bool { movesWindow }
     override func mouseDragged(with event: NSEvent) {
-        guard let renderer else { return }
+        guard let renderer, !movesWindow else { return }
         renderer.panX += event.deltaX / max(bounds.width, 1) * 2
         renderer.panY -= event.deltaY / max(bounds.height, 1) * 2
     }
     override func scrollWheel(with event: NSEvent) {
-        guard let renderer else { return }
+        guard let renderer, !movesWindow else { return }
         renderer.zoom = max(0.2, min(3, renderer.zoom * exp(-event.scrollingDeltaY * 0.01)))
     }
 }
