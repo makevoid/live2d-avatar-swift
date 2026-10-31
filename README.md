@@ -79,12 +79,12 @@ the same rigs, expressions, motions and controls.
     <td width="33%" align="center">
       <img src="https://github.com/user-attachments/assets/a00165df-8cea-4ddf-88cd-435dfab59315" alt="Rei in the app window with the floating control bar"><br>
       <b>Rei</b> · personal build default<br>
-      <sub><b>Bear Commander</b> by <b>DG_STUDIO / @KenKenMo6 / 天才设计学家</b></sub>
+      <sub><b>Bear Commander</b> by <b>DG_STUDIO / @KenKenMo6</b> - premium - not incl.</sub>
     </td>
     <td width="33%" align="center">
       <img src="https://github.com/user-attachments/assets/aab2aca3-dd51-42ff-8a51-2172a1a89744" alt="Poldo in the app window with the mountain meadow and the floating control bar"><br>
       <b>Poldo</b> · creature<br>
-      <sub><b>F2U Red Panda</b> model; the meadow is drawn by the app</sub>
+      <sub><b>F2U Red Panda</b> premium model - not incl.</sub>
     </td>
   </tr>
 </table>
